@@ -1,0 +1,45 @@
+{
+  "name": "final-approver-interface-backend",
+  "version": "1.0.0",
+  "description": "Disbursement Workflow Management System",
+  "main": "index.js",
+  "scripts": {
+    "test": "jest --coverage --runInBand",
+    "start": "node src/server.js",
+    "test:watch": "jest --watch"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Webnai/final-approver-interface-backend.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/Webnai/final-approver-interface-backend/issues"
+  },
+  "homepage": "https://github.com/Webnai/final-approver-interface-backend#readme",
+  "dependencies": {
+    "express": "^5.2.1",
+    "express-rate-limit": "^8.3.2",
+    "mongoose": "^9.4.1"
+  },
+  "devDependencies": {
+    "jest": "^30.3.0",
+    "supertest": "^7.2.2"
+  },
+  "jest": {
+    "coverageThreshold": {
+      "global": {
+        "branches": "100",
+        "functions": "100",
+        "lines": "100",
+        "statements": "100"
+      }
+    },
+    "collectCoverageFrom": [
+      "src/app.js"
+    ]
+  }
+}
