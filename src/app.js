@@ -1,4 +1,5 @@
 const express = require('express');
+const { rateLimit } = require('express-rate-limit');
 const mongoose = require('mongoose');
 const Loan = require('./models/loan');
 
@@ -20,9 +21,20 @@ const extractMentions = (message) => {
 const allChecklistChecksPassed = (checklist) =>
   REQUIRED_CHECKLIST_FIELDS.every((field) => checklist?.[field] === true);
 
-const buildApp = () => {
+const buildApp = (options = {}) => {
+  const { rateLimit: rateLimitConfig = { windowMs: 60_000, maxRequests: 100 } } = options;
   const app = express();
   app.use(express.json());
+  app.use(
+    '/api',
+    rateLimit({
+      windowMs: rateLimitConfig.windowMs,
+      limit: rateLimitConfig.maxRequests,
+      standardHeaders: true,
+      legacyHeaders: false,
+      message: { error: 'Too many requests. Try again later.' }
+    })
+  );
 
   app.post('/api/loans/instructions', async (req, res) => {
     const { instruction, checklist, priority = 'normal', documents = [] } = req.body;
@@ -278,4 +290,8 @@ const buildApp = () => {
   return app;
 };
 
-module.exports = { buildApp, extractMentions, allChecklistChecksPassed };
+module.exports = {
+  buildApp,
+  extractMentions,
+  allChecklistChecksPassed
+};

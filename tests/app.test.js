@@ -9,9 +9,13 @@ jest.mock('../src/models/loan', () => ({
 }));
 
 const Loan = require('../src/models/loan');
-const { buildApp, extractMentions, allChecklistChecksPassed } = require('../src/app');
+const {
+  buildApp,
+  extractMentions,
+  allChecklistChecksPassed
+} = require('../src/app');
 
-const app = buildApp();
+const app = buildApp({ rateLimit: { windowMs: 60_000, maxRequests: 1000 } });
 
 const validInstruction = {
   beneficiaryName: 'John Doe',
@@ -65,6 +69,14 @@ describe('workflow backend', () => {
     expect(allChecklistChecksPassed(validChecklist)).toBe(true);
     expect(allChecklistChecksPassed({ ...validChecklist, idVerified: false })).toBe(false);
     expect(allChecklistChecksPassed(undefined)).toBe(false);
+  });
+
+  it('uses default build options', async () => {
+    const defaultApp = buildApp();
+    Loan.find.mockReturnValue(withSort([]));
+
+    const response = await request(defaultApp).get('/api/loans/queue?status=unassigned');
+    expect(response.status).toBe(200);
   });
 
   it('creates loan instruction when mandatory checks are true', async () => {
@@ -306,5 +318,16 @@ describe('workflow backend', () => {
 
     const serverError = await request(app).get('/api/loans/queue?status=unassigned');
     expect(serverError.status).toBe(500);
+  });
+
+  it('rate-limits API requests', async () => {
+    const limitedApp = buildApp({ rateLimit: { windowMs: 1000, maxRequests: 1 } });
+
+    Loan.find.mockReturnValue(withSort([]));
+    const first = await request(limitedApp).get('/api/loans/queue?status=unassigned');
+    expect(first.status).toBe(200);
+
+    const blocked = await request(limitedApp).get('/api/loans/queue?status=unassigned');
+    expect(blocked.status).toBe(429);
   });
 });
