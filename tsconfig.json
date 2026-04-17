@@ -8,7 +8,7 @@
     "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true,
     "resolveJsonModule": true,
-    "rootDir": "./",
+    "rootDir": "./src",
     "outDir": "dist",
     "types": ["node", "jest"]
   },
