@@ -35,8 +35,16 @@ const authenticateApiRequest = ({ requireAuth, tokenVerifier }: AuthConfig) => {
       res.locals.currentUser = await tokenVerifier(idToken);
       logger.info({ path: req.path, uid: res.locals.currentUser.uid }, 'Request authenticated successfully.');
       next();
-    } catch {
-      logger.warn({ path: req.path }, 'Request rejected due to invalid or expired token.');
+    } catch (error) {
+      const authError = error as { code?: string; message?: string };
+      logger.warn(
+        {
+          path: req.path,
+          authErrorCode: authError.code || 'unknown',
+          authErrorMessage: authError.message || 'Unknown auth verification error.'
+        },
+        'Request rejected due to invalid or expired token.'
+      );
       res.status(401).json({ error: 'Invalid or expired authentication token.' });
     }
   };

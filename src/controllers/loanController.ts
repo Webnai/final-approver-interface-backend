@@ -10,6 +10,21 @@ import {
   sortByPriorityThenSubmission
 } from '../services/loanWorkflow';
 
+const STATUS_ALIASES: Record<string, string> = {
+  'action-required': 'action_required',
+  'in-progress': 'processing',
+  'on-hold': 'on_hold',
+  'awaiting-disbursement': 'awaiting_disbursement'
+};
+
+const normalizeQueueStatus = (status?: string): string | undefined => {
+  if (!status) {
+    return undefined;
+  }
+
+  return STATUS_ALIASES[status] || status;
+};
+
 export const createLoanController = ({ loanModel, now }: AppDependencies) => {
   const createInstruction = async (req: Request, res: Response) => {
     const {
@@ -63,7 +78,8 @@ export const createLoanController = ({ loanModel, now }: AppDependencies) => {
   };
 
   const getQueue = async (req: Request, res: Response) => {
-    const { status } = req.query as { status?: string };
+    const { status: rawStatus } = req.query as { status?: string };
+    const status = normalizeQueueStatus(rawStatus);
     logger.info({ action: 'queue_fetch', status: status || 'all' }, 'Queue fetch requested.');
 
     if (status === 'unassigned') {

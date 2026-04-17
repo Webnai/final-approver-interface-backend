@@ -26,4 +26,30 @@ describe('authenticateApiRequest middleware', () => {
     expect(res.json).toHaveBeenCalledWith({ error: 'Missing bearer token.' });
     expect(next).not.toHaveBeenCalled();
   });
+
+  it('returns 401 when token verification throws non-error object', async () => {
+    const middleware = authenticateApiRequest({
+      requireAuth: true,
+      tokenVerifier: jest.fn().mockRejectedValue({})
+    });
+
+    const req = {
+      path: '/api/me',
+      header: jest.fn().mockReturnValue('Bearer token-value')
+    } as unknown as Request;
+
+    const res = {
+      locals: {},
+      status: jest.fn().mockReturnThis(),
+      json: jest.fn().mockReturnThis()
+    } as unknown as Response;
+
+    const next = jest.fn() as unknown as NextFunction;
+
+    await middleware(req, res, next);
+
+    expect(res.status).toHaveBeenCalledWith(401);
+    expect(res.json).toHaveBeenCalledWith({ error: 'Invalid or expired authentication token.' });
+    expect(next).not.toHaveBeenCalled();
+  });
 });

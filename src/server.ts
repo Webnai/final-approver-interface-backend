@@ -1,4 +1,6 @@
 import dns from 'node:dns';
+import fs from 'node:fs';
+import path from 'node:path';
 import dotenv from 'dotenv';
 import { applicationDefault, cert, getApps, initializeApp, ServiceAccount } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
@@ -17,23 +19,50 @@ const port = Number(process.env.PORT || 3000);
 const rawMongoUri = process.env.MONGO_URI;
 const mongoRetryMs = Number(process.env.MONGO_RETRY_MS || 5000);
 
-const parseServiceAccount = (): ServiceAccount | null => {
-  const rawJson = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
-  if (rawJson) {
-    const parsed = JSON.parse(rawJson) as Record<string, string | undefined>;
-    const privateKey = (parsed.private_key || parsed.privateKey || '').replace(/\\n/g, '\n');
-    const projectId = parsed.project_id || parsed.projectId || '';
-    const clientEmail = parsed.client_email || parsed.clientEmail || '';
+const normalizeEnvValue = (value: string): string => {
+  const trimmed = value.trim();
+  if (
+    (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+    (trimmed.startsWith("'") && trimmed.endsWith("'"))
+  ) {
+    return trimmed.slice(1, -1).trim();
+  }
+  return trimmed;
+};
 
-    if (!projectId || !clientEmail || !privateKey) {
-      return null;
+const normalizeServiceAccountRecord = (parsed: Record<string, string | undefined>): ServiceAccount | null => {
+  const privateKey = (parsed.private_key || parsed.privateKey || '').replace(/\\n/g, '\n');
+  const projectId = parsed.project_id || parsed.projectId || '';
+  const clientEmail = parsed.client_email || parsed.clientEmail || '';
+
+  if (!projectId || !clientEmail || !privateKey) {
+    return null;
+  }
+
+  return {
+    projectId,
+    clientEmail,
+    privateKey
+  };
+};
+
+const parseServiceAccount = (): ServiceAccount | null => {
+  const rawValue = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
+  if (rawValue) {
+    const normalized = normalizeEnvValue(rawValue);
+
+    if (normalized.endsWith('.json')) {
+      const resolvedPath = path.isAbsolute(normalized) ? normalized : path.resolve(process.cwd(), normalized);
+      if (!fs.existsSync(resolvedPath)) {
+        throw new Error(`Firebase service account file not found at: ${resolvedPath}`);
+      }
+
+      const parsed = JSON.parse(fs.readFileSync(resolvedPath, 'utf8')) as Record<string, string | undefined>;
+      return normalizeServiceAccountRecord(parsed);
     }
 
-    return {
-      projectId,
-      clientEmail,
-      privateKey
-    };
+    const parsed = JSON.parse(normalized) as Record<string, string | undefined>;
+    return normalizeServiceAccountRecord(parsed);
   }
 
   const projectId = process.env.FIREBASE_PROJECT_ID;
@@ -58,9 +87,11 @@ const getFirebaseApp = () => {
 
   const serviceAccount = parseServiceAccount();
   if (serviceAccount) {
+    logger.info({ source: 'service-account' }, 'Firebase Admin initialized with explicit service account credentials.');
     return initializeApp({ credential: cert(serviceAccount) });
   }
 
+  logger.warn({ source: 'application-default' }, 'Firebase Admin initialized with application default credentials.');
   return initializeApp({ credential: applicationDefault() });
 };
 
@@ -76,17 +107,6 @@ const verifyFirebaseToken: TokenVerifier = async (idToken) => {
     role: typeof decodedToken.role === 'string' ? decodedToken.role : null,
     claims: decodedToken as Record<string, unknown>
   };
-};
-
-const normalizeEnvValue = (value: string): string => {
-  const trimmed = value.trim();
-  if (
-    (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
-    (trimmed.startsWith("'") && trimmed.endsWith("'"))
-  ) {
-    return trimmed.slice(1, -1).trim();
-  }
-  return trimmed;
 };
 
 const ensureSrvMongoUri = (value: string): string => {

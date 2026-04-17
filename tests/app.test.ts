@@ -84,6 +84,36 @@ describe('workflow backend - typescript', () => {
     expect(res.body).toEqual({ status: 'ok' });
   });
 
+  it('applies cors headers for allowed frontend origin', async () => {
+    const res = await request(app).get('/health').set('Origin', 'http://localhost:5173');
+
+    expect(res.status).toBe(200);
+    expect(res.headers['access-control-allow-origin']).toBe('http://localhost:5173');
+    expect(res.headers['access-control-allow-credentials']).toBe('true');
+  });
+
+  it('returns cors preflight response with configured methods and headers', async () => {
+    const res = await request(app)
+      .options('/api/loans/queue')
+      .set('Origin', 'https://final-approver-interface-frontend.vercel.app')
+      .set('Access-Control-Request-Method', 'POST')
+      .set('Access-Control-Request-Headers', 'Content-Type, Authorization');
+
+    expect(res.status).toBe(204);
+    expect(res.headers['access-control-allow-origin']).toBe(
+      'https://final-approver-interface-frontend.vercel.app'
+    );
+    expect(res.headers['access-control-allow-methods']).toContain('GET');
+    expect(res.headers['access-control-allow-methods']).toContain('POST');
+    expect(res.headers['access-control-allow-methods']).toContain('PUT');
+    expect(res.headers['access-control-allow-methods']).toContain('DELETE');
+    expect(res.headers['access-control-allow-methods']).toContain('OPTIONS');
+    expect(res.headers['access-control-allow-methods']).toContain('PATCH');
+    expect(res.headers['access-control-allow-headers']).toContain('Content-Type');
+    expect(res.headers['access-control-allow-headers']).toContain('Authorization');
+    expect(res.headers['access-control-allow-credentials']).toBe('true');
+  });
+
   it('builds with zero arguments', async () => {
     const zeroArgApp = buildApp();
     const res = await request(zeroArgApp).get('/health');
@@ -211,6 +241,23 @@ describe('workflow backend - typescript', () => {
     const defaultStatus = await request(app).get('/api/loans/queue');
     expect(defaultStatus.status).toBe(200);
     expect(loanModel.find).toHaveBeenNthCalledWith(4, {});
+
+    loanModel.find
+      .mockReturnValueOnce(withSort([lower]))
+      .mockReturnValueOnce(withSort([higher]))
+      .mockReturnValueOnce(withSort([samePriorityEarlier]));
+
+    const inProgressAlias = await request(app).get('/api/loans/queue?status=in-progress');
+    expect(inProgressAlias.status).toBe(200);
+    expect(loanModel.find).toHaveBeenNthCalledWith(5, { status: 'processing' });
+
+    const onHoldAlias = await request(app).get('/api/loans/queue?status=on-hold');
+    expect(onHoldAlias.status).toBe(200);
+    expect(loanModel.find).toHaveBeenNthCalledWith(6, { status: 'on_hold' });
+
+    const actionRequiredAlias = await request(app).get('/api/loans/queue?status=action-required');
+    expect(actionRequiredAlias.status).toBe(200);
+    expect(loanModel.find).toHaveBeenNthCalledWith(7, { status: 'action_required' });
   });
 
   it('handles claim lifecycle constraints', async () => {
