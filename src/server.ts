@@ -25,7 +25,9 @@ export const startServer = async (): Promise<void> => {
 
   const mongoUri = normalizeEnvValue(rawMongoUri);
 
-  await mongoose.connect(mongoUri);
+  await mongoose.connect(mongoUri, {
+    tlsInsecure: true
+  });
 
   const app = buildApp();
   app.listen(port, () => {
