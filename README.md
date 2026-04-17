@@ -20,7 +20,7 @@ Production-ready disbursement workflow API built with Node.js, TypeScript, Expre
 ```bash
 npm install
 npm run build
-MONGO_URI="mongodb://127.0.0.1:27017/final-approver" npm start
+MONGO_URI="mongodb+srv://USERNAME:PASSWORD@YOUR-CLUSTER.mongodb.net/final-approver?retryWrites=true&w=majority" npm start
 ```
 
 For local development:
