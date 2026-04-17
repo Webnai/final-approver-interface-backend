@@ -4,6 +4,7 @@ import { applicationDefault, cert, getApps, initializeApp, ServiceAccount } from
 import { getAuth } from 'firebase-admin/auth';
 import mongoose from 'mongoose';
 import { buildApp } from './app';
+import logger from './logging/logger';
 import { TokenVerifier } from './types/app';
 
 // Configure DNS: Prioritize IPv4 to avoid link-local IPv6 DNS resolution issues
@@ -126,8 +127,7 @@ export const startServer = async (): Promise<void> => {
     }
   });
   app.listen(port, () => {
-    // eslint-disable-next-line no-console
-    console.log(`Server running on port ${port}`);
+    logger.info({ port }, 'Server started.');
   });
 
   let retryTimer: NodeJS.Timeout | null = null;
@@ -151,11 +151,9 @@ export const startServer = async (): Promise<void> => {
     isConnecting = true;
     try {
       await mongoose.connect(mongoUri);
-      // eslint-disable-next-line no-console
-      console.log('Connected to MongoDB');
+      logger.info('Connected to MongoDB.');
     } catch (error) {
-      // eslint-disable-next-line no-console
-      console.error(`MongoDB connection failed. Retrying in ${mongoRetryMs}ms.`, error);
+      logger.error({ error, mongoRetryMs }, 'MongoDB connection failed. Scheduling reconnect.');
       scheduleReconnect();
     } finally {
       isConnecting = false;
@@ -163,8 +161,7 @@ export const startServer = async (): Promise<void> => {
   };
 
   mongoose.connection.on('disconnected', () => {
-    // eslint-disable-next-line no-console
-    console.warn('MongoDB disconnected. Attempting to reconnect.');
+    logger.warn('MongoDB disconnected. Attempting to reconnect.');
     scheduleReconnect();
   });
 

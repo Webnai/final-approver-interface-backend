@@ -186,6 +186,7 @@ describe('workflow backend - typescript', () => {
     loanModel.find
       .mockReturnValueOnce(withSort([lower, higher, samePriorityEarlier]))
       .mockReturnValueOnce(withSort([lower]))
+      .mockReturnValueOnce(withSort([higher]))
       .mockReturnValueOnce(withSort([higher]));
 
     const unassigned = await request(app).get('/api/loans/queue?status=unassigned');
@@ -206,6 +207,10 @@ describe('workflow backend - typescript', () => {
     const all = await request(app).get('/api/loans/queue?status=all');
     expect(all.status).toBe(200);
     expect(loanModel.find).toHaveBeenNthCalledWith(3, {});
+
+    const defaultStatus = await request(app).get('/api/loans/queue');
+    expect(defaultStatus.status).toBe(200);
+    expect(loanModel.find).toHaveBeenNthCalledWith(4, {});
   });
 
   it('handles claim lifecycle constraints', async () => {

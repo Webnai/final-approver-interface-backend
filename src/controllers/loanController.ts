@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import logger from '../logging/logger';
 import { Checklist, LoanDocument, Priority } from '../models/loan';
 import { AppDependencies } from '../types/app';
 import {
@@ -24,6 +25,8 @@ export const createLoanController = ({ loanModel, now }: AppDependencies) => {
       documents?: string[];
       finalApproverName?: string;
     };
+
+    logger.info({ action: 'create_instruction_attempt', priority, finalApproverName }, 'Loan instruction submission received.');
 
     if (!instruction || !checklist || !allChecklistChecksPassed(checklist)) {
       return res.status(400).json({
@@ -54,11 +57,14 @@ export const createLoanController = ({ loanModel, now }: AppDependencies) => {
       ]
     });
 
+    logger.info({ action: 'create_instruction_success', loanId: loan.id, priority: loan.priority }, 'Loan instruction created.');
+
     return res.status(201).json(loan);
   };
 
   const getQueue = async (req: Request, res: Response) => {
     const { status } = req.query as { status?: string };
+    logger.info({ action: 'queue_fetch', status: status || 'all' }, 'Queue fetch requested.');
 
     if (status === 'unassigned') {
       const unassigned = await loanModel
@@ -82,6 +88,7 @@ export const createLoanController = ({ loanModel, now }: AppDependencies) => {
 
   const claimTask = async (req: Request, res: Response) => {
     const { officerName } = req.body as { officerName?: string };
+    logger.info({ action: 'claim_task_attempt', loanId: req.params.id, officerName }, 'Loan claim requested.');
     if (!officerName) {
       return res.status(400).json({ error: 'officerName is required.' });
     }
@@ -107,11 +114,14 @@ export const createLoanController = ({ loanModel, now }: AppDependencies) => {
     pushStatusHistory(loan, 'processing', officerName);
     await loan.save();
 
+    logger.info({ action: 'claim_task_success', loanId: loan.id, officerName }, 'Loan claimed successfully.');
+
     return res.json(loan);
   };
 
   const updateInstruction = async (req: Request, res: Response) => {
     const { actorRole } = req.body as { actorRole?: string };
+    logger.info({ action: 'instruction_update_attempt', loanId: req.params.id, actorRole }, 'Instruction update requested.');
 
     const loan = await loanModel.findById(req.params.id);
 
@@ -140,10 +150,13 @@ export const createLoanController = ({ loanModel, now }: AppDependencies) => {
     pushStatusHistory(loan, 'awaiting_disbursement', 'final_approver');
     await loan.save();
 
+    logger.info({ action: 'instruction_update_success', loanId: loan.id }, 'Instruction updated and re-queued.');
+
     return res.json(loan);
   };
 
   const getPackage = async (req: Request, res: Response) => {
+    logger.info({ action: 'package_fetch', loanId: req.params.id }, 'Disbursement package requested.');
     const loan = await loanModel.findById(req.params.id);
 
     if (!loan) {
@@ -167,6 +180,7 @@ export const createLoanController = ({ loanModel, now }: AppDependencies) => {
   };
 
   const getStatusBreadcrumbs = async (req: Request, res: Response) => {
+    logger.info({ action: 'status_breadcrumbs_fetch', loanId: req.params.id }, 'Loan status breadcrumbs requested.');
     const loan = await loanModel.findById(req.params.id);
 
     if (!loan) {
@@ -178,6 +192,7 @@ export const createLoanController = ({ loanModel, now }: AppDependencies) => {
 
   const addComment = async (req: Request, res: Response) => {
     const { author, message } = req.body as { author?: string; message?: string };
+    logger.info({ action: 'comment_add_attempt', loanId: req.params.id, author }, 'Loan comment submission received.');
     if (!author || !message) {
       return res.status(400).json({ error: 'author and message are required.' });
     }
@@ -195,11 +210,14 @@ export const createLoanController = ({ loanModel, now }: AppDependencies) => {
     });
     await loan.save();
 
+    logger.info({ action: 'comment_add_success', loanId: loan.id, author }, 'Loan comment created.');
+
     return res.status(201).json(loan.comments[loan.comments.length - 1]);
   };
 
   const returnToApprover = async (req: Request, res: Response) => {
     const { reason, officerName } = req.body as { reason?: string; officerName?: string };
+    logger.info({ action: 'return_to_approver_attempt', loanId: req.params.id, officerName }, 'Return-to-approver requested.');
     if (!reason) {
       return res.status(400).json({ error: 'reason is required.' });
     }
@@ -222,11 +240,14 @@ export const createLoanController = ({ loanModel, now }: AppDependencies) => {
     pushStatusHistory(loan, 'action_required', officerName || 'disbursement_officer');
     await loan.save();
 
+    logger.info({ action: 'return_to_approver_success', loanId: loan.id, officerName }, 'Loan returned to approver.');
+
     return res.json(loan);
   };
 
   const putOnHold = async (req: Request, res: Response) => {
     const { officerName } = req.body as { officerName?: string };
+    logger.info({ action: 'hold_attempt', loanId: req.params.id, officerName }, 'On-hold operation requested.');
     const loan = await loanModel.findById(req.params.id);
 
     if (!loan) {
@@ -243,6 +264,8 @@ export const createLoanController = ({ loanModel, now }: AppDependencies) => {
     pushStatusHistory(loan, 'on_hold', officerName);
     await loan.save();
 
+    logger.info({ action: 'hold_success', loanId: loan.id, officerName }, 'Loan placed on hold.');
+
     return res.json(loan);
   };
 
@@ -252,6 +275,8 @@ export const createLoanController = ({ loanModel, now }: AppDependencies) => {
       officerName?: string;
       finalApproverName?: string;
     };
+
+    logger.info({ action: 'complete_attempt', loanId: req.params.id, officerName }, 'Loan completion requested.');
 
     if (!transactionReference) {
       return res.status(400).json({
@@ -280,6 +305,11 @@ export const createLoanController = ({ loanModel, now }: AppDependencies) => {
     });
     pushStatusHistory(loan, 'completed', officerName);
     await loan.save();
+
+    logger.info(
+      { action: 'complete_success', loanId: loan.id, officerName, transactionReference },
+      'Loan marked as completed.'
+    );
 
     return res.json(loan);
   };

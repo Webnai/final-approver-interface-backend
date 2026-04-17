@@ -26,14 +26,18 @@
   },
   "homepage": "https://github.com/Webnai/final-approver-interface-backend#readme",
   "dependencies": {
+    "@types/cors": "^2.8.19",
     "compression": "^1.8.1",
+    "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
     "express-rate-limit": "^8.3.2",
     "firebase-admin": "^13.8.0",
     "helmet": "^8.1.0",
     "mongodb": "^7.1.1",
-    "mongoose": "^9.4.1"
+    "mongoose": "^9.4.1",
+    "pino": "^10.3.1",
+    "pino-http": "^11.0.0"
   },
   "devDependencies": {
     "@types/compression": "^1.8.1",

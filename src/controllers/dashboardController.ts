@@ -1,9 +1,11 @@
 import { Request, Response } from 'express';
+import logger from '../logging/logger';
 import { AppDependencies } from '../types/app';
 import { ACTIVE_STATUSES } from '../services/loanWorkflow';
 
 export const createDashboardController = ({ loanModel, now }: AppDependencies) => {
   const getMetrics = async (req: Request, res: Response) => {
+    logger.info({ action: 'dashboard_metrics_fetch', staleHours: Number(req.query.staleHours ?? 24) }, 'Dashboard metrics requested.');
     const staleHours = Number(req.query.staleHours ?? 24);
     const staleThreshold = new Date(now().getTime() - staleHours * 60 * 60 * 1000);
     const startOfToday = new Date(now());

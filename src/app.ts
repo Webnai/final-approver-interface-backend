@@ -5,6 +5,7 @@ import helmet from 'helmet';
 import Loan from './models/loan';
 import authenticateApiRequest from './middleware/authenticateApiRequest';
 import errorHandler from './middleware/errorHandler';
+import requestLogger from './middleware/requestLogger';
 import buildDashboardRoutes from './routes/dashboardRoutes';
 import healthRoutes from './routes/healthRoutes';
 import buildLoanRoutes from './routes/loanRoutes';
@@ -35,6 +36,7 @@ export const buildApp = (options: BuildAppOptions = {}) => {
   app.use(helmet());
   app.use(compression());
   app.use(express.json({ limit: '1mb' }));
+  app.use(requestLogger);
 
   app.use(healthRoutes);
   app.use(
