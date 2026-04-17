@@ -1,7 +1,10 @@
 import dns from 'node:dns';
 import dotenv from 'dotenv';
+import { applicationDefault, cert, getApps, initializeApp, ServiceAccount } from 'firebase-admin/app';
+import { getAuth } from 'firebase-admin/auth';
 import mongoose from 'mongoose';
 import { buildApp } from './app';
+import { TokenVerifier } from './types/app';
 
 // Configure DNS: Prioritize IPv4 to avoid link-local IPv6 DNS resolution issues
 dns.setDefaultResultOrder('ipv4first');
@@ -12,6 +15,67 @@ dotenv.config();
 const port = Number(process.env.PORT || 3000);
 const rawMongoUri = process.env.MONGO_URI;
 const mongoRetryMs = Number(process.env.MONGO_RETRY_MS || 5000);
+
+const parseServiceAccount = (): ServiceAccount | null => {
+  const rawJson = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
+  if (rawJson) {
+    const parsed = JSON.parse(rawJson) as Record<string, string | undefined>;
+    const privateKey = (parsed.private_key || parsed.privateKey || '').replace(/\\n/g, '\n');
+    const projectId = parsed.project_id || parsed.projectId || '';
+    const clientEmail = parsed.client_email || parsed.clientEmail || '';
+
+    if (!projectId || !clientEmail || !privateKey) {
+      return null;
+    }
+
+    return {
+      projectId,
+      clientEmail,
+      privateKey
+    };
+  }
+
+  const projectId = process.env.FIREBASE_PROJECT_ID;
+  const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+  const privateKey = process.env.FIREBASE_PRIVATE_KEY;
+
+  if (!projectId || !clientEmail || !privateKey) {
+    return null;
+  }
+
+  return {
+    projectId,
+    clientEmail,
+    privateKey: privateKey.replace(/\\n/g, '\n')
+  };
+};
+
+const getFirebaseApp = () => {
+  if (getApps().length > 0) {
+    return getApps()[0];
+  }
+
+  const serviceAccount = parseServiceAccount();
+  if (serviceAccount) {
+    return initializeApp({ credential: cert(serviceAccount) });
+  }
+
+  return initializeApp({ credential: applicationDefault() });
+};
+
+const verifyFirebaseToken: TokenVerifier = async (idToken) => {
+  const decodedToken = await getAuth(getFirebaseApp()).verifyIdToken(idToken);
+
+  return {
+    uid: decodedToken.uid,
+    email: decodedToken.email || null,
+    name: decodedToken.name || null,
+    picture: decodedToken.picture || null,
+    emailVerified: Boolean(decodedToken.email_verified),
+    role: typeof decodedToken.role === 'string' ? decodedToken.role : null,
+    claims: decodedToken as Record<string, unknown>
+  };
+};
 
 const normalizeEnvValue = (value: string): string => {
   const trimmed = value.trim();
@@ -55,7 +119,12 @@ export const startServer = async (): Promise<void> => {
 
   const mongoUri = ensureSrvMongoUri(rawMongoUri);
 
-  const app = buildApp();
+  const app = buildApp({
+    auth: {
+      requireAuth: true,
+      tokenVerifier: verifyFirebaseToken
+    }
+  });
   app.listen(port, () => {
     // eslint-disable-next-line no-console
     console.log(`Server running on port ${port}`);

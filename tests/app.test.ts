@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 import request from 'supertest';
 import { allChecklistChecksPassed, buildApp, extractMentions } from '../src/app';
 import Loan, { LoanDocument, LoanModel } from '../src/models/loan';
+import { AuthenticatedUser } from '../src/types/app';
 
 const validInstruction = {
   beneficiaryName: 'John Doe',
@@ -72,7 +73,8 @@ describe('workflow backend - typescript', () => {
     app = buildApp({
       loanModel: loanModel as unknown as LoanModel,
       rateLimit: { windowMs: 60_000, maxRequests: 1000 },
-      now: () => new Date('2026-01-03T00:00:00.000Z')
+      now: () => new Date('2026-01-03T00:00:00.000Z'),
+      auth: { requireAuth: false }
     });
   });
 
@@ -82,14 +84,22 @@ describe('workflow backend - typescript', () => {
     expect(res.body).toEqual({ status: 'ok' });
   });
 
+  it('builds with zero arguments', async () => {
+    const zeroArgApp = buildApp();
+    const res = await request(zeroArgApp).get('/health');
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ status: 'ok' });
+  });
+
   it('builds with default options', async () => {
     const aggregateSpy = jest.spyOn(Loan, 'aggregate').mockResolvedValueOnce([] as never);
     const findSpy = jest
       .spyOn(Loan, 'find')
       .mockResolvedValueOnce([] as never)
-      .mockReturnValueOnce(withSort([]) as never);
+      .mockReturnValueOnce(withSort([]) as never)
+      .mockResolvedValueOnce([] as never);
 
-    const defaultApp = buildApp();
+    const defaultApp = buildApp({ auth: { requireAuth: false } });
     const health = await request(defaultApp).get('/health');
     expect(health.status).toBe(200);
 
@@ -98,6 +108,16 @@ describe('workflow backend - typescript', () => {
 
     aggregateSpy.mockRestore();
     findSpy.mockRestore();
+  });
+
+  it('requires authentication by default on api routes', async () => {
+    const defaultAuthApp = buildApp({
+      loanModel: loanModel as unknown as LoanModel
+    });
+
+    const response = await request(defaultAuthApp).get('/api/loans/queue?status=all');
+    expect(response.status).toBe(500);
+    expect(response.body).toEqual({ error: 'Authentication is not configured.' });
   });
 
   it('validates helper functions', () => {
@@ -444,23 +464,28 @@ describe('workflow backend - typescript', () => {
     });
 
     loanModel.aggregate.mockResolvedValueOnce([{ total: 7000 }]);
-    loanModel.find.mockResolvedValueOnce([completedLoan, completedWithoutCompletedAt]).mockReturnValueOnce(withSort([staleLoan]));
+    loanModel.find
+      .mockResolvedValueOnce([completedLoan, completedWithoutCompletedAt])
+      .mockReturnValueOnce(withSort([staleLoan]))
+      .mockResolvedValueOnce([staleLoan]);
 
     const metrics = await request(app).get('/api/dashboard/metrics?staleHours=48');
     expect(metrics.status).toBe(200);
     expect(metrics.body.totalPendingDisbursement).toBe(7000);
     expect(metrics.body.averageTurnaroundHours).toBe(1.5);
+    expect(metrics.body.processingToday).toBe(1);
     expect(metrics.body.staleHoursThreshold).toBe(48);
     expect(metrics.body.staleApplications).toEqual(
       expect.arrayContaining([expect.objectContaining({ id: 'stale-1', loanReference: 'LN-ST-1' })])
     );
 
     loanModel.aggregate.mockResolvedValueOnce([]);
-    loanModel.find.mockResolvedValueOnce([]).mockReturnValueOnce(withSort([]));
+    loanModel.find.mockResolvedValueOnce([]).mockReturnValueOnce(withSort([])).mockResolvedValueOnce([]);
     const empty = await request(app).get('/api/dashboard/metrics');
     expect(empty.status).toBe(200);
     expect(empty.body.totalPendingDisbursement).toBe(0);
     expect(empty.body.averageTurnaroundHours).toBe(0);
+    expect(empty.body.processingToday).toBe(0);
   });
 
   it('handles validation and unknown server errors', async () => {
@@ -485,7 +510,8 @@ describe('workflow backend - typescript', () => {
 
     const limitedApp = buildApp({
       loanModel: limitedModel as unknown as LoanModel,
-      rateLimit: { windowMs: 1000, maxRequests: 1 }
+      rateLimit: { windowMs: 1000, maxRequests: 1 },
+      auth: { requireAuth: false }
     });
 
     const first = await request(limitedApp).get('/api/loans/queue?status=unassigned');
@@ -493,6 +519,62 @@ describe('workflow backend - typescript', () => {
 
     const second = await request(limitedApp).get('/api/loans/queue?status=unassigned');
     expect(second.status).toBe(429);
+  });
+
+  it('enforces authentication on api routes and returns current user profile', async () => {
+    const currentUser: AuthenticatedUser = {
+      uid: 'uid-1',
+      email: 'user@example.com',
+      name: 'User One',
+      picture: 'https://example.com/avatar.png',
+      emailVerified: true,
+      role: 'final_approver',
+      claims: { role: 'final_approver' }
+    };
+
+    const tokenVerifier = jest.fn().mockResolvedValue(currentUser);
+
+    const authApp = buildApp({
+      loanModel: loanModel as unknown as LoanModel,
+      rateLimit: { windowMs: 60_000, maxRequests: 1000 },
+      auth: { requireAuth: true, tokenVerifier }
+    });
+
+    const missingHeader = await request(authApp).get('/api/me');
+    expect(missingHeader.status).toBe(401);
+
+    const invalidHeader = await request(authApp).get('/api/me').set('Authorization', 'Basic token');
+    expect(invalidHeader.status).toBe(401);
+
+    const missingToken = await request(authApp).get('/api/me').set('Authorization', 'Bearer   ');
+    expect(missingToken.status).toBe(401);
+
+    tokenVerifier.mockRejectedValueOnce(new Error('bad token'));
+    const invalidToken = await request(authApp).get('/api/me').set('Authorization', 'Bearer invalid-token');
+    expect(invalidToken.status).toBe(401);
+
+    const success = await request(authApp).get('/api/me').set('Authorization', 'Bearer valid-token');
+    expect(success.status).toBe(200);
+    expect(success.body).toEqual(currentUser);
+    expect(tokenVerifier).toHaveBeenLastCalledWith('valid-token');
+
+    const misconfiguredApp = buildApp({
+      loanModel: loanModel as unknown as LoanModel,
+      rateLimit: { windowMs: 60_000, maxRequests: 1000 },
+      auth: { requireAuth: true }
+    });
+
+    const misconfigured = await request(misconfiguredApp).get('/api/me').set('Authorization', 'Bearer any-token');
+    expect(misconfigured.status).toBe(500);
+
+    const noAuthApp = buildApp({
+      loanModel: loanModel as unknown as LoanModel,
+      rateLimit: { windowMs: 60_000, maxRequests: 1000 },
+      auth: { requireAuth: false }
+    });
+
+    const noAuth = await request(noAuthApp).get('/api/me');
+    expect(noAuth.status).toBe(401);
   });
 });
 

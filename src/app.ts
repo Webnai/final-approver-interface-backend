@@ -3,10 +3,12 @@ import express from 'express';
 import { rateLimit } from 'express-rate-limit';
 import helmet from 'helmet';
 import Loan from './models/loan';
+import authenticateApiRequest from './middleware/authenticateApiRequest';
 import errorHandler from './middleware/errorHandler';
 import buildDashboardRoutes from './routes/dashboardRoutes';
 import healthRoutes from './routes/healthRoutes';
 import buildLoanRoutes from './routes/loanRoutes';
+import buildProfileRoutes from './routes/profileRoutes';
 import buildSupervisorRoutes from './routes/supervisorRoutes';
 import { allChecklistChecksPassed, extractMentions } from './services/loanWorkflow';
 import { BuildAppOptions } from './types/app';
@@ -17,8 +19,11 @@ export const buildApp = (options: BuildAppOptions = {}) => {
   const {
     rateLimit: rateLimitConfig = { windowMs: 60_000, maxRequests: 100 },
     loanModel = Loan,
-    now = () => new Date()
+    now = () => new Date(),
+    auth: authConfig = {}
   } = options;
+
+  const { requireAuth = true, tokenVerifier } = authConfig;
 
   const dependencies = {
     loanModel,
@@ -43,6 +48,8 @@ export const buildApp = (options: BuildAppOptions = {}) => {
     })
   );
 
+  app.use('/api', authenticateApiRequest({ requireAuth, tokenVerifier }));
+  app.use('/api', buildProfileRoutes());
   app.use('/api', buildLoanRoutes(dependencies));
   app.use('/api', buildSupervisorRoutes(dependencies));
   app.use('/api', buildDashboardRoutes(dependencies));

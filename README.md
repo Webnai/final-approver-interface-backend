@@ -50,6 +50,20 @@ npm test
 - `POST /api/loans/:id/complete`
 - `GET /api/supervisor/capacity`
 - `GET /api/dashboard/metrics?staleHours=24`
+- `GET /api/me`
+
+## Authentication
+
+All `/api/*` endpoints require a Firebase ID token in the `Authorization` header:
+
+```http
+Authorization: Bearer <firebase_id_token>
+```
+
+Configure one of these server credential options:
+
+- `FIREBASE_SERVICE_ACCOUNT_JSON` (full service-account JSON string)
+- `FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, `FIREBASE_PRIVATE_KEY`
 
 ## Contribution Notes
 
