@@ -1,11 +1,13 @@
 {
   "name": "final-approver-interface-backend",
   "version": "1.0.0",
-  "description": "Disbursement Workflow Management System",
-  "main": "index.js",
+  "description": "Production-ready Disbursement Workflow Management API (Node.js + TypeScript + MongoDB)",
+  "main": "dist/server.js",
   "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/server.js",
+    "dev": "tsx watch src/server.ts",
     "test": "jest --coverage --runInBand",
-    "start": "node src/server.js",
     "test:watch": "jest --watch"
   },
   "repository": {
@@ -21,25 +23,45 @@
   },
   "homepage": "https://github.com/Webnai/final-approver-interface-backend#readme",
   "dependencies": {
+    "compression": "^1.8.1",
     "express": "^5.2.1",
     "express-rate-limit": "^8.3.2",
+    "helmet": "^8.1.0",
+    "mongodb": "^7.1.1",
     "mongoose": "^9.4.1"
   },
   "devDependencies": {
+    "@types/compression": "^1.8.1",
+    "@types/express": "^5.0.5",
+    "@types/jest": "^30.0.0",
+    "@types/node": "^24.9.1",
+    "@types/supertest": "^6.0.3",
     "jest": "^30.3.0",
-    "supertest": "^7.2.2"
+    "supertest": "^7.2.2",
+    "ts-jest": "^29.4.5",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3"
   },
   "jest": {
+    "preset": "ts-jest",
+    "testEnvironment": "node",
+    "testMatch": [
+      "**/tests/**/*.test.ts"
+    ],
+    "modulePathIgnorePatterns": [
+      "<rootDir>/dist/"
+    ],
+    "collectCoverageFrom": [
+      "src/**/*.ts",
+      "!src/server.ts"
+    ],
     "coverageThreshold": {
       "global": {
-        "branches": "100",
-        "functions": "100",
-        "lines": "100",
-        "statements": "100"
+        "branches": 100,
+        "functions": 100,
+        "lines": 100,
+        "statements": 100
       }
-    },
-    "collectCoverageFrom": [
-      "src/app.js"
-    ]
+    }
   }
 }

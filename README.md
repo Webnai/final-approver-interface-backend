@@ -1,30 +1,59 @@
 # final-approver-interface-backend
 
-Disbursement Workflow Management System (Node.js + MongoDB).
+Production-ready disbursement workflow API built with Node.js, TypeScript, Express, and MongoDB.
 
-## Run
+## Why this implementation
+
+- Final Approver gatekeeping with mandatory eligibility checklist.
+- Instruction lockdown to prevent unauthorized payout-field changes.
+- Priority tagging (`normal|urgent|high_value`) to push critical files to the top.
+- Claim-based work queue so only one disbursement officer owns a task.
+- Capacity dashboard and workflow status breadcrumbs.
+- Clean disbursement package (copy-ready account and amount + documents).
+- Mandatory transaction reference to close the loop.
+- Return-to-approver exception path with mandatory reason.
+- Internal comments thread with `@mention` extraction.
+- Operational metrics: pending volume, average TAT, stale queue alerts.
+
+## Quickstart
 
 ```bash
 npm install
-MONGO_URI='mongodb://127.0.0.1:27017/final-approver' npm start
+npm run build
+MONGO_URI="mongodb://127.0.0.1:27017/final-approver" npm start
 ```
 
-## Test (100% coverage enforced)
+For local development:
+
+```bash
+npm run dev
+```
+
+## Tests (100% coverage enforced)
 
 ```bash
 npm test
 ```
 
-## Key API Endpoints
+## API Surface
 
-- `POST /api/loans/instructions` – final approver submission with mandatory checklist validation and priority tagging (`normal|urgent|high_value`)
-- `PATCH /api/loans/:id/instruction` – instruction update (blocked after lockdown)
-- `GET /api/loans/queue?status=unassigned` – centralized queue view
-- `POST /api/loans/:id/claim` – claim/assign record to self
-- `GET /api/loans/:id/package` – clean disbursement package (copy fields + documents)
-- `POST /api/loans/:id/comments` – comments thread with `@mention` extraction
-- `POST /api/loans/:id/return` – return to approver with mandatory reason
-- `PATCH /api/loans/:id/hold` – move item to on-hold
-- `POST /api/loans/:id/complete` – close loop with mandatory transaction reference
-- `GET /api/supervisor/capacity` – active file counts per disbursement officer
-- `GET /api/dashboard/metrics` – pending total, average TAT, stale queue entries (24h+)
+- `GET /health`
+- `POST /api/loans/instructions`
+- `GET /api/loans/queue?status=unassigned|awaiting_disbursement|processing|on_hold|completed|action_required|all`
+- `POST /api/loans/:id/claim`
+- `PATCH /api/loans/:id/instruction`
+- `GET /api/loans/:id/package`
+- `GET /api/loans/:id/status-breadcrumbs`
+- `POST /api/loans/:id/comments`
+- `POST /api/loans/:id/return`
+- `PATCH /api/loans/:id/hold`
+- `POST /api/loans/:id/complete`
+- `GET /api/supervisor/capacity`
+- `GET /api/dashboard/metrics?staleHours=24`
+
+## Contribution Notes
+
+- Keep business rules in `src/app.ts` route handlers grouped by workflow stage.
+- Add request/response examples in PRs for new endpoints.
+- Preserve strict typing and run `npm run build` before opening a PR.
+- Tests must keep global branch/function/line/statement coverage at 100%.
