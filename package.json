@@ -6,7 +6,8 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "start": "node dist/server.js",
-    "dev": "tsx watch src/server.ts",
+    "dev": "tsx watch src/server.ts | pino-pretty --colorize --translateTime \"SYS:standard\" --ignore pid,hostname",
+    "dev:raw": "tsx watch src/server.ts",
     "dev:pretty": "tsx watch src/server.ts | pino-pretty --colorize --translateTime \"SYS:standard\" --ignore pid,hostname",
     "test": "jest --coverage --runInBand",
     "test:watch": "jest --watch"

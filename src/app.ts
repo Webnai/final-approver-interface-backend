@@ -20,7 +20,7 @@ export { allChecklistChecksPassed, extractMentions };
 const corsOptions: cors.CorsOptions = {
   origin: ['http://localhost:5173', 'https://final-approver-interface-frontend.vercel.app'],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'Cache-Control', 'Pragma', 'If-None-Match'],
   credentials: true
 };
 

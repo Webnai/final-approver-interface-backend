@@ -17,6 +17,23 @@ const STATUS_ALIASES: Record<string, string> = {
   'awaiting-disbursement': 'awaiting_disbursement'
 };
 
+const normalizePriority = (value?: string): Priority | undefined => {
+  if (!value) {
+    return undefined;
+  }
+
+  const normalized = value.trim().toLowerCase().replace(/[\s-]+/g, '_');
+  if (normalized === 'highvalue') {
+    return 'high_value';
+  }
+
+  if (normalized === 'normal' || normalized === 'urgent' || normalized === 'high_value') {
+    return normalized;
+  }
+
+  return undefined;
+};
+
 const normalizeQueueStatus = (status?: string): string | undefined => {
   if (!status) {
     return undefined;
@@ -30,16 +47,18 @@ export const createLoanController = ({ loanModel, now }: AppDependencies) => {
     const {
       instruction,
       checklist,
-      priority = 'normal',
+      priority: rawPriority = 'normal',
       documents = [],
       finalApproverName = 'Final Approver'
     } = req.body as {
       instruction?: LoanDocument['instruction'];
       checklist?: Checklist;
-      priority?: Priority;
+      priority?: string;
       documents?: string[];
       finalApproverName?: string;
     };
+
+    const priority = normalizePriority(rawPriority);
 
     logger.info({ action: 'create_instruction_attempt', priority, finalApproverName }, 'Loan instruction submission received.');
 
@@ -49,7 +68,7 @@ export const createLoanController = ({ loanModel, now }: AppDependencies) => {
       });
     }
 
-    if (!['normal', 'urgent', 'high_value'].includes(priority)) {
+    if (!priority) {
       return res.status(400).json({
         error: 'priority must be one of: normal, urgent, high_value.'
       });

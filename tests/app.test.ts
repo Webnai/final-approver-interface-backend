@@ -97,7 +97,7 @@ describe('workflow backend - typescript', () => {
       .options('/api/loans/queue')
       .set('Origin', 'https://final-approver-interface-frontend.vercel.app')
       .set('Access-Control-Request-Method', 'POST')
-      .set('Access-Control-Request-Headers', 'Content-Type, Authorization');
+      .set('Access-Control-Request-Headers', 'Content-Type, Authorization, Cache-Control');
 
     expect(res.status).toBe(204);
     expect(res.headers['access-control-allow-origin']).toBe(
@@ -111,6 +111,7 @@ describe('workflow backend - typescript', () => {
     expect(res.headers['access-control-allow-methods']).toContain('PATCH');
     expect(res.headers['access-control-allow-headers']).toContain('Content-Type');
     expect(res.headers['access-control-allow-headers']).toContain('Authorization');
+    expect(res.headers['access-control-allow-headers']).toContain('Cache-Control');
     expect(res.headers['access-control-allow-credentials']).toBe('true');
   });
 
@@ -172,6 +173,11 @@ describe('workflow backend - typescript', () => {
       .send({ instruction: validInstruction, checklist: validChecklist, priority: 'critical' });
     expect(invalidPriority.status).toBe(400);
 
+    const emptyPriority = await request(app)
+      .post('/api/loans/instructions')
+      .send({ instruction: validInstruction, checklist: validChecklist, priority: '' });
+    expect(emptyPriority.status).toBe(400);
+
     const created = await request(app)
       .post('/api/loans/instructions')
       .send({
@@ -192,6 +198,30 @@ describe('workflow backend - typescript', () => {
     );
     expect(loanModel.create.mock.calls[0][0].statusHistory[0]).toEqual(
       expect.objectContaining({ status: 'awaiting_disbursement', changedBy: 'FA1' })
+    );
+
+    loanModel.create.mockResolvedValueOnce(mockLoanDoc({ priority: 'normal' as LoanDocument['priority'] }));
+    const titleCasePriority = await request(app)
+      .post('/api/loans/instructions')
+      .send({ instruction: validInstruction, checklist: validChecklist, priority: 'Normal' });
+
+    expect(titleCasePriority.status).toBe(201);
+    expect(loanModel.create).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        priority: 'normal'
+      })
+    );
+
+    loanModel.create.mockResolvedValueOnce(mockLoanDoc({ priority: 'high_value' as LoanDocument['priority'] }));
+    const compactHighValuePriority = await request(app)
+      .post('/api/loans/instructions')
+      .send({ instruction: validInstruction, checklist: validChecklist, priority: 'highvalue' });
+
+    expect(compactHighValuePriority.status).toBe(201);
+    expect(loanModel.create).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        priority: 'high_value'
+      })
     );
   });
 
