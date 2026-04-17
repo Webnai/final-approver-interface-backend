@@ -163,6 +163,71 @@ describe('workflow backend - typescript', () => {
   it('creates instruction, validates checklist and priority', async () => {
     loanModel.create.mockResolvedValue(mockLoanDoc({ priority: 'urgent' as LoanDocument['priority'] }));
 
+    const missingInstruction = await request(app)
+      .post('/api/loans/instructions')
+      .send({ checklist: validChecklist, priority: 'normal' });
+    expect(missingInstruction.status).toBe(400);
+    expect(missingInstruction.body).toEqual({
+      error: 'instruction must include beneficiaryName, accountNumber, bankCode, amount, and loanReference.'
+    });
+
+    const missingLoanReference = await request(app)
+      .post('/api/loans/instructions')
+      .send({
+        instruction: {
+          beneficiaryName: 'John Doe',
+          accountNumber: '1234567890',
+          bankCode: '001',
+          amount: 5000
+        },
+        checklist: validChecklist,
+        priority: 'normal'
+      });
+    expect(missingLoanReference.status).toBe(400);
+    expect(missingLoanReference.body).toEqual({
+      error: 'instruction must include beneficiaryName, accountNumber, bankCode, amount, and loanReference.'
+    });
+
+    const invalidAmount = await request(app)
+      .post('/api/loans/instructions')
+      .send({
+        instruction: {
+          beneficiaryName: 'John Doe',
+          accountNumber: '1234567890',
+          bankCode: '001',
+          amount: '',
+          loanReference: 'LN-1001'
+        },
+        checklist: validChecklist,
+        priority: 'normal'
+      });
+    expect(invalidAmount.status).toBe(400);
+    expect(invalidAmount.body).toEqual({
+      error: 'instruction must include beneficiaryName, accountNumber, bankCode, amount, and loanReference.'
+    });
+
+    const missingAmount = await request(app)
+      .post('/api/loans/instructions')
+      .send({
+        instruction: {
+          beneficiaryName: 'John Doe',
+          accountNumber: '1234567890',
+          bankCode: '001',
+          loanReference: 'LN-1001'
+        },
+        checklist: validChecklist,
+        priority: 'normal'
+      });
+    expect(missingAmount.status).toBe(400);
+    expect(missingAmount.body).toEqual({
+      error: 'instruction must include beneficiaryName, accountNumber, bankCode, amount, and loanReference.'
+    });
+
+    const missingChecklist = await request(app)
+      .post('/api/loans/instructions')
+      .send({ instruction: validInstruction, priority: 'normal' });
+    expect(missingChecklist.status).toBe(400);
+
     const invalidChecklist = await request(app)
       .post('/api/loans/instructions')
       .send({ instruction: validInstruction, checklist: { ...validChecklist, idVerified: false } });
@@ -223,6 +288,134 @@ describe('workflow backend - typescript', () => {
         priority: 'high_value'
       })
     );
+
+    loanModel.create.mockResolvedValueOnce(mockLoanDoc({ priority: 'normal' as LoanDocument['priority'] }));
+    const aliasedChecklistFields = await request(app)
+      .post('/api/loans/instructions')
+      .send({
+        instruction: validInstruction,
+        checklist: {
+          idVerified: true,
+          creditScoreVerified: true,
+          collateralDocumentationSigned: true,
+          kycCompleted: true,
+          sanctionsCheckCleared: true
+        },
+        priority: 'normal'
+      });
+
+    expect(aliasedChecklistFields.status).toBe(201);
+    expect(loanModel.create).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        checklist: expect.objectContaining({
+          collateralSigned: true,
+          kycVerified: true,
+          sanctionsCleared: true
+        })
+      })
+    );
+
+    loanModel.create.mockResolvedValueOnce(mockLoanDoc({ priority: 'normal' as LoanDocument['priority'] }));
+    const stringChecklistAliases = await request(app)
+      .post('/api/loans/instructions')
+      .send({
+        instruction: validInstruction,
+        checklist: {
+          idVerified: true,
+          collateralSigned: true,
+          sanctionsCheckCleared: 'true',
+          kycVerified: true,
+          creditScoreChecked: 'true'
+        },
+        priority: 'normal'
+      });
+
+    expect(stringChecklistAliases.status).toBe(201);
+    expect(loanModel.create).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        checklist: expect.objectContaining({
+          sanctionsCleared: true,
+          creditScoreVerified: true
+        })
+      })
+    );
+
+    loanModel.create.mockResolvedValueOnce(mockLoanDoc({ priority: 'normal' as LoanDocument['priority'] }));
+    const nullPrimarySanctionsField = await request(app)
+      .post('/api/loans/instructions')
+      .send({
+        instruction: validInstruction,
+        checklist: {
+          idVerified: true,
+          collateralSigned: true,
+          sanctionsCleared: null,
+          sanctionsCheckCleared: true,
+          kycVerified: true,
+          creditScoreVerified: true
+        },
+        priority: 'normal'
+      });
+
+    expect(nullPrimarySanctionsField.status).toBe(201);
+    expect(loanModel.create).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        checklist: expect.objectContaining({
+          sanctionsCleared: true
+        })
+      })
+    );
+
+    loanModel.create.mockResolvedValueOnce(mockLoanDoc({ priority: 'normal' as LoanDocument['priority'] }));
+    const snakeCaseIdVerifiedAlias = await request(app)
+      .post('/api/loans/instructions')
+      .send({
+        instruction: validInstruction,
+        checklist: {
+          id_verified: true,
+          collateralSigned: true,
+          sanctionsCleared: true,
+          kycVerified: true,
+          creditScoreVerified: true
+        },
+        priority: 'normal'
+      });
+
+    expect(snakeCaseIdVerifiedAlias.status).toBe(201);
+    expect(loanModel.create).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        checklist: expect.objectContaining({
+          idVerified: true
+        })
+      })
+    );
+
+    loanModel.create.mockResolvedValueOnce(mockLoanDoc({ priority: 'normal' as LoanDocument['priority'] }));
+    const loanReferenceAlias = await request(app)
+      .post('/api/loans/instructions')
+      .send({
+        instruction: {
+          beneficiary: 'John Doe',
+          accountNo: '1234567890',
+          swiftCode: '001',
+          amount: '5000',
+          loanReferenceId: 'LN-1001'
+        },
+        checklist: validChecklist,
+        priority: 'normal'
+      });
+
+    expect(loanReferenceAlias.status).toBe(201);
+    expect(loanModel.create).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        instruction: expect.objectContaining({
+          beneficiaryName: 'John Doe',
+          accountNumber: '1234567890',
+          bankCode: '001',
+          amount: 5000,
+          loanReference: 'LN-1001'
+        })
+      })
+    );
   });
 
   it('lists queue variants with priority ordering', async () => {
@@ -279,7 +472,9 @@ describe('workflow backend - typescript', () => {
 
     const inProgressAlias = await request(app).get('/api/loans/queue?status=in-progress');
     expect(inProgressAlias.status).toBe(200);
-    expect(loanModel.find).toHaveBeenNthCalledWith(5, { status: 'processing' });
+    expect(loanModel.find).toHaveBeenNthCalledWith(5, {
+      status: { $in: ['awaiting_disbursement', 'processing'] }
+    });
 
     const onHoldAlias = await request(app).get('/api/loans/queue?status=on-hold');
     expect(onHoldAlias.status).toBe(200);

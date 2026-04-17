@@ -34,6 +34,65 @@ const normalizePriority = (value?: string): Priority | undefined => {
   return undefined;
 };
 
+const toBool = (value: unknown): boolean => value === true || value === 'true';
+
+const normalizeChecklist = (value?: Record<string, unknown>): Checklist | undefined => {
+  if (!value) {
+    return undefined;
+  }
+
+  return {
+    idVerified: toBool(value.idVerified ?? value.id_verified),
+    collateralSigned: toBool(value.collateralSigned ?? value.collateralDocumentationSigned),
+    sanctionsCleared: toBool(value.sanctionsCleared ?? value.sanctionsCheckCleared),
+    kycVerified: toBool(value.kycVerified ?? value.kycCompleted),
+    creditScoreVerified: toBool(value.creditScoreVerified ?? value.creditScoreChecked)
+  };
+};
+
+const normalizeInstruction = (
+  value?: Partial<LoanDocument['instruction']> & Record<string, unknown>
+): LoanDocument['instruction'] | undefined => {
+  if (!value) {
+    return undefined;
+  }
+
+  const pickFirstDefined = (source: Record<string, unknown>, keys: string[]): unknown => {
+    for (const key of keys) {
+      const candidate = source[key];
+      if (candidate !== undefined && candidate !== null) {
+        return candidate;
+      }
+    }
+    return undefined;
+  };
+
+  const normalizeString = (input: unknown): string => String(input ?? '').trim();
+
+  const normalized = {
+    beneficiaryName: normalizeString(pickFirstDefined(value, ['beneficiaryName', 'beneficiary'])),
+    accountNumber: normalizeString(pickFirstDefined(value, ['accountNumber', 'accountNo'])),
+    bankCode: normalizeString(pickFirstDefined(value, ['bankCode', 'swiftCode'])),
+    amount:
+      typeof value.amount === 'number'
+        ? value.amount
+        : Number(String(value.amount ?? '').trim() || Number.NaN),
+    loanReference: normalizeString(pickFirstDefined(value, ['loanReference', 'loanReferenceId', 'loanId']))
+  };
+
+  if (
+    !normalized.beneficiaryName ||
+    !normalized.accountNumber ||
+    !normalized.bankCode ||
+    Number.isNaN(normalized.amount) ||
+    !normalized.loanReference
+  ) {
+    return undefined;
+  }
+
+  return normalized;
+};
+
 const normalizeQueueStatus = (status?: string): string | undefined => {
   if (!status) {
     return undefined;
@@ -45,24 +104,32 @@ const normalizeQueueStatus = (status?: string): string | undefined => {
 export const createLoanController = ({ loanModel, now }: AppDependencies) => {
   const createInstruction = async (req: Request, res: Response) => {
     const {
-      instruction,
-      checklist,
+      instruction: rawInstruction,
+      checklist: rawChecklist,
       priority: rawPriority = 'normal',
       documents = [],
       finalApproverName = 'Final Approver'
     } = req.body as {
-      instruction?: LoanDocument['instruction'];
-      checklist?: Checklist;
+      instruction?: Partial<LoanDocument['instruction']> & Record<string, unknown>;
+      checklist?: Checklist | Record<string, unknown>;
       priority?: string;
       documents?: string[];
       finalApproverName?: string;
     };
 
+    const instruction = normalizeInstruction(rawInstruction);
+    const checklist = normalizeChecklist(rawChecklist as Record<string, unknown> | undefined);
     const priority = normalizePriority(rawPriority);
 
     logger.info({ action: 'create_instruction_attempt', priority, finalApproverName }, 'Loan instruction submission received.');
 
-    if (!instruction || !checklist || !allChecklistChecksPassed(checklist)) {
+    if (!instruction) {
+      return res.status(400).json({
+        error: 'instruction must include beneficiaryName, accountNumber, bankCode, amount, and loanReference.'
+      });
+    }
+
+    if (!checklist || !allChecklistChecksPassed(checklist)) {
       return res.status(400).json({
         error: 'All mandatory checklist items must be confirmed before submission.'
       });
@@ -114,7 +181,11 @@ export const createLoanController = ({ loanModel, now }: AppDependencies) => {
 
     const query: Record<string, unknown> = {};
     if (status && status !== 'all') {
-      query.status = status;
+      if (rawStatus === 'in-progress') {
+        query.status = { $in: ['awaiting_disbursement', 'processing'] };
+      } else {
+        query.status = status;
+      }
     }
 
     const loans = await loanModel.find(query).sort({ submittedAt: 1 });
